@@ -140,7 +140,7 @@ with left:
                     st.session_state.messages.append({"role": "agent", "text": agent_text, "table": agent_table})
 
             # Force rerun to show new messages immediately
-            st.experimental_rerun()
+            st.rerun()
 
 with right:
     st.markdown("### Help / Tips")
