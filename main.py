@@ -11,15 +11,32 @@ st.set_page_config(
     page_icon="assets/jadeglobalbig.png"
 )
 
-# --- Custom CSS for chat layout ---
+# --- Custom CSS for the single-page layout ---
 st.markdown("""
     <style>
+    /* Prevent the main Streamlit page from scrolling */
+    .stApp {
+        overflow: hidden;
+    }
+    
+    /* This is the most important part: Calculate the chat container height */
+    .chat-container { 
+        /* 100vh is the full screen height. We subtract the header's approximate height. */
+        height: calc(100vh - 230px); 
+        overflow-y: auto; /* Make ONLY the chat container scrollable */
+        padding: 12px; 
+        border-radius: 8px;
+        border: 1px solid #eee; 
+        background: white; 
+        display: flex; 
+        flex-direction: column-reverse;
+    }
+
+    /* Standard styles for chat bubbles and header */
     .chat-user { background:#46729f; color:white; padding:10px 14px; border-radius:12px;
                  max-width:80%; margin-left:auto; margin-bottom:8px; word-wrap: break-word;}
     .chat-agent { background:#f1f5f9; color:#111; padding:10px 14px; border-radius:12px;
                   max-width:80%; margin-right:auto; margin-bottom:8px; word-wrap: break-word;}
-    .chat-container { height: 65vh; overflow-y: auto; padding: 12px; border-radius: 8px;
-                      border: 1px solid #eee; background: white; display: flex; flex-direction: column-reverse;}
     .header-title {font-size:26px; font-weight:700;}
     .description { color:#374151; font-size:15px; margin-top:4px;}
     </style>
@@ -45,36 +62,29 @@ with col2:
         </div>
     """, unsafe_allow_html=True)
 
-st.write("")  # spacing
+# These two lines were removed to save vertical space
+# st.write("")
+# st.markdown("### Chat")
 
 # --- Chat Window ---
-st.markdown("### Chat")
 chat_box = st.container()
 with chat_box:
-    # We add a div with a specific ID to scroll to it later
     st.markdown('<div class="chat-container" id="chat-window">', unsafe_allow_html=True)
-    
-    # Render messages
     for m in st.session_state.messages:
         if m["role"] == "user":
             st.markdown(f'<div class="chat-user">You: {m["text"]}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="chat-agent">Finclose Agent:</div>', unsafe_allow_html=True)
-            # The agent response can be text, a table, or both
             if m.get("text"):
                 st.code(m["text"], language="json")
             if m.get("table") is not None:
                 st.dataframe(m["table"], use_container_width=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
-
-# --- Chat Input (NEW IMPLEMENTATION) ---
+# --- Chat Input (at the bottom of the screen) ---
 if prompt := st.chat_input("Write your message here..."):
-    # Add user message to session state
+    # (The rest of the logic remains unchanged)
     st.session_state.messages.append({"role": "user", "text": prompt, "table": None})
-
-    # Call UiPath Agent
     with st.spinner("Sending to Finclose Agent..."):
         try:
             result = run_robot_and_get_output(prompt)
@@ -84,8 +94,6 @@ if prompt := st.chat_input("Write your message here..."):
         else:
             agent_text, agent_table = None, None
             parsed = result
-
-            # This parsing logic remains the same as your original file
             try:
                 if isinstance(parsed, str):
                     try:
@@ -127,6 +135,4 @@ if prompt := st.chat_input("Write your message here..."):
                 agent_text = "Error processing agent response: " + str(e)
 
             st.session_state.messages.append({"role": "agent", "text": agent_text, "table": agent_table})
-
-    # Refresh the page to show the new messages
     st.rerun()
