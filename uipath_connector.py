@@ -4,6 +4,7 @@ import streamlit as st
 import json
 import time
 
+# get_oauth_token function remains the same...
 def get_oauth_token(secrets):
     """Authenticates with UiPath Orchestrator and returns an access token."""
     auth_url = "https://cloud.uipath.com/identity_/connect/token"
@@ -16,6 +17,7 @@ def get_oauth_token(secrets):
     response = requests.post(auth_url, data=auth_payload)
     response.raise_for_status()
     return response.json()["access_token"]
+
 
 def run_robot_and_get_output(user_query: str):
     """Starts a UiPath robot, waits for it to complete, and returns the output."""
@@ -45,9 +47,21 @@ def run_robot_and_get_output(user_query: str):
     start_response.raise_for_status()
     job_id = start_response.json()["value"][0]["Id"]
 
-    # 2. Poll for Job Completion
+    # 2. Poll for Job Completion (with a timeout)
     get_job_url = f"{orchestrator_base_url}/Jobs({job_id})"
+    
+    # --- ADDITIONS FOR TIMEOUT ---
+    start_time = time.time()
+    timeout_seconds = 300 # 5 minutes
+    # ---------------------------
+
     while True:
+        # --- ADDITION: Check for timeout ---
+        if time.time() - start_time > timeout_seconds:
+            # You can add logic here to stop the job via API if desired
+            raise Exception(f"UiPath job timed out after {timeout_seconds} seconds.")
+        # -----------------------------------
+
         time.sleep(5) # Wait for 5 seconds before checking status
         job_status_response = requests.get(get_job_url, headers=headers)
         job_status_response.raise_for_status()
@@ -58,6 +72,8 @@ def run_robot_and_get_output(user_query: str):
             if state == "Successful":
                 output_args_str = job_data.get("OutputArguments", "{}")
                 output_args = json.loads(output_args_str)
-                return output_args.get("out_QueryResultJson", "")
+                return output_args.get("out_QueryResultJson", "") # Return the string directly
             else:
-                raise Exception(f"UiPath job failed with state: {state}")
+                # If the job faulted, get the reason for the failure
+                reason = job_data.get("Info", f"UiPath job failed with state: {state}")
+                raise Exception(reason)
