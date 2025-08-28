@@ -22,7 +22,7 @@ st.markdown("""
     /* This is the most important part: Calculate the chat container height */
     .chat-container { 
         /* 100vh is the full screen height. We subtract the header's approximate height. */
-        height: calc(100vh - 600px); 
+        height: calc(100vh - 800px); 
         overflow-y: auto; /* Make ONLY the chat container scrollable */
         padding: 12px; 
         border-radius: 8px;
