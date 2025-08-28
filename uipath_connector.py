@@ -37,8 +37,7 @@ def run_robot_and_get_output(user_query: str):
             "ReleaseKey": secrets["process_key"],
             "Strategy": "ModernJobsCount",
             "JobsCount": 1,
-            "InputArguments": json.dumps({"User_Input
-": user_query})
+            "InputArguments": json.dumps({"User_Input": user_query})
         }
     }
     
