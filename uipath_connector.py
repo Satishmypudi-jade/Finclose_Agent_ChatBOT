@@ -58,6 +58,6 @@ def run_robot_and_get_output(user_query: str):
             if state == "Successful":
                 output_args_str = job_data.get("OutputArguments", "{}")
                 output_args = json.loads(output_args_str)
-                return json.loads(output_args.get("out_QueryResultJson", "{}"))
+                return output_args.get("out_QueryResultJson", "")
             else:
                 raise Exception(f"UiPath job failed with state: {state}")
