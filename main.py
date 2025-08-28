@@ -15,11 +15,11 @@ st.set_page_config(
 st.markdown("""
     <style>
     .chat-user { background:#46729f; color:white; padding:10px 14px; border-radius:12px;
-                 max-width:80%; margin-left:auto; margin-bottom:8px;}
+                 max-width:80%; margin-left:auto; margin-bottom:8px; word-wrap: break-word;}
     .chat-agent { background:#f1f5f9; color:#111; padding:10px 14px; border-radius:12px;
-                  max-width:80%; margin-right:auto; margin-bottom:8px;}
+                  max-width:80%; margin-right:auto; margin-bottom:8px; word-wrap: break-word;}
     .chat-container { height: 65vh; overflow-y: auto; padding: 12px; border-radius: 8px;
-                      border: 1px solid #eee; background: white;}
+                      border: 1px solid #eee; background: white; display: flex; flex-direction: column-reverse;}
     .header-title {font-size:26px; font-weight:700;}
     .description { color:#374151; font-size:15px; margin-top:4px;}
     </style>
@@ -51,14 +51,16 @@ st.write("")  # spacing
 st.markdown("### Chat")
 chat_box = st.container()
 with chat_box:
+    # We add a div with a specific ID to scroll to it later
     st.markdown('<div class="chat-container" id="chat-window">', unsafe_allow_html=True)
-
-    # render messages
+    
+    # Render messages
     for m in st.session_state.messages:
         if m["role"] == "user":
             st.markdown(f'<div class="chat-user">You: {m["text"]}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="chat-agent">Finclose Agent:</div>', unsafe_allow_html=True)
+            # The agent response can be text, a table, or both
             if m.get("text"):
                 st.code(m["text"], language="json")
             if m.get("table") is not None:
@@ -66,67 +68,65 @@ with chat_box:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Chat Input ---
-with st.form("chat_form", clear_on_submit=True):
-    prompt = st.text_input("Write your message here...", key="user_prompt")
-    submitted = st.form_submit_button("Send")
 
-    if submitted and prompt:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "text": prompt, "table": None})
+# --- Chat Input (NEW IMPLEMENTATION) ---
+if prompt := st.chat_input("Write your message here..."):
+    # Add user message to session state
+    st.session_state.messages.append({"role": "user", "text": prompt, "table": None})
 
-        # Call UiPath Agent
-        with st.spinner("Sending to Finclose Agent..."):
+    # Call UiPath Agent
+    with st.spinner("Sending to Finclose Agent..."):
+        try:
+            result = run_robot_and_get_output(prompt)
+        except Exception as e:
+            err_text = f"Error calling UiPath: {str(e)}"
+            st.session_state.messages.append({"role": "agent", "text": err_text, "table": None})
+        else:
+            agent_text, agent_table = None, None
+            parsed = result
+
+            # This parsing logic remains the same as your original file
             try:
-                result = run_robot_and_get_output(prompt)
-            except Exception as e:
-                err_text = f"Error calling UiPath: {str(e)}"
-                st.session_state.messages.append({"role": "agent", "text": err_text, "table": None})
-            else:
-                agent_text, agent_table = None, None
-                parsed = result
-
-                try:
-                    if isinstance(parsed, str):
+                if isinstance(parsed, str):
+                    try:
+                        parsed_json = json.loads(parsed)
+                        parsed = parsed_json
+                    except Exception:
+                        agent_text = parsed
+                if isinstance(parsed, dict) and "error" in parsed:
+                    agent_text = "Agent error: " + str(parsed["error"])
+                elif isinstance(parsed, dict) and "data" in parsed:
+                    inner = parsed["data"]
+                    if isinstance(inner, str):
                         try:
-                            parsed_json = json.loads(parsed)
-                            parsed = parsed_json
+                            df = pd.read_json(inner, orient="split")
+                            agent_table = df
                         except Exception:
-                            agent_text = parsed
-                    if isinstance(parsed, dict) and "error" in parsed:
-                        agent_text = "Agent error: " + str(parsed["error"])
-                    elif isinstance(parsed, dict) and "data" in parsed:
-                        inner = parsed["data"]
-                        if isinstance(inner, str):
                             try:
-                                df = pd.read_json(inner, orient="split")
-                                agent_table = df
+                                maybe_list = json.loads(inner)
+                                if isinstance(maybe_list, list):
+                                    agent_table = pd.DataFrame(maybe_list)
+                                else:
+                                    agent_text = json.dumps(maybe_list, indent=2)
                             except Exception:
-                                try:
-                                    maybe_list = json.loads(inner)
-                                    if isinstance(maybe_list, list):
-                                        agent_table = pd.DataFrame(maybe_list)
-                                    else:
-                                        agent_text = json.dumps(maybe_list, indent=2)
-                                except Exception:
-                                    agent_text = str(inner)
-                        elif isinstance(inner, list):
-                            agent_table = pd.DataFrame(inner)
-                        else:
-                            agent_text = json.dumps(inner, indent=2)
-                    elif isinstance(parsed, list):
-                        if len(parsed) > 0 and isinstance(parsed[0], dict):
-                            agent_table = pd.DataFrame(parsed)
-                        else:
-                            agent_text = json.dumps(parsed, indent=2)
-                    elif isinstance(parsed, dict):
-                        agent_text = json.dumps(parsed, indent=2)
+                                agent_text = str(inner)
+                    elif isinstance(inner, list):
+                        agent_table = pd.DataFrame(inner)
                     else:
-                        agent_text = str(parsed)
-                except Exception as e:
-                    agent_text = "Error processing agent response: " + str(e)
+                        agent_text = json.dumps(inner, indent=2)
+                elif isinstance(parsed, list):
+                    if len(parsed) > 0 and isinstance(parsed[0], dict):
+                        agent_table = pd.DataFrame(parsed)
+                    else:
+                        agent_text = json.dumps(parsed, indent=2)
+                elif isinstance(parsed, dict):
+                    agent_text = json.dumps(parsed, indent=2)
+                else:
+                    agent_text = str(parsed)
+            except Exception as e:
+                agent_text = "Error processing agent response: " + str(e)
 
-                st.session_state.messages.append({"role": "agent", "text": agent_text, "table": agent_table})
+            st.session_state.messages.append({"role": "agent", "text": agent_text, "table": agent_table})
 
-        # refresh to show new messages
-        st.rerun()
+    # Refresh the page to show the new messages
+    st.rerun()
